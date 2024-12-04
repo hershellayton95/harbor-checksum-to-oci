@@ -1,36 +1,65 @@
 #!/bin/bash
 
-SOURCE_API_ENDPOINT="https://harbor.navarcos.ccoe-nc.com/api/chartrepo/navarcos/charts"
-SOURCE_CHART_ENTPOINT="https://harbor.navarcos.ccoe-nc.com/chartrepo/navarcos"
+set -e
 
-SINK_HOST="https://harbor.git.ccoe.internal/"
+SOURCE_HTTP_HOST="https://harbor.navarcos.ccoe-nc.com"
+SOURCE_CHARTS_API_ENDPOINT="$SOURCE_HTTP_HOST/api/chartrepo/"
+SOURCE_PROJECT="navarcos"
+SOURCE_REPO_CHART_ENTPOINT="https://harbor.navarcos.ccoe-nc.com/chartrepo/navarcos"
+
+SINK_HTTPS_HOST="https://harbor.git.ccoe.internal"
+SINK_OCI_HOST="oci://harbor.git.ccoe.internal"
+SINK_PROJECTS_API_ENDPOINT="$SINK_HTTPS_HOST/api/v2.0/projects"
 SINK_PROJECT="test-harbor"
 SINK_USERNAME='robot$test-harbor+test'
 SINK_PASSWORD="pO5BhskMKoghK9hxy1yghHvl1Rz10SFg"
 
-helm repo add tmp $SOURCE_CHART_ENTPOINT
+helm repo add tmp $SOURCE_REPO_CHART_ENTPOINT
 
-echo $SINK_PASSWORD | helm registry login $SINK_HOST -u $SINK_USERNAME --password-stdin 
+echo $SINK_PASSWORD | helm registry login $SINK_HTTPS_HOST -u $SINK_USERNAME --password-stdin 
 
-charts_name=($(curl -s -X GET "$SOURCE_API_ENDPOINT" | jq -r '.[].name'))
+charts_name=($(curl -s -X GET "$SOURCE_CHARTS_API_ENDPOINT/$SOURCE_PROJECT/charts" | jq -r '.[].name'))
 
 mkdir -p /tmp/helm
 
 for chart_name in "${charts_name[@]}"; do
-    chart_name=($(curl -s -X GET "$SOURCE_API_ENDPOINT/$chart_name" | jq -r '.[].name'))
-    chart_version=($(curl -s -X GET "$SOURCE_API_ENDPOINT/$chart_name" | jq -r '.[].version'))
-    
-    for i in "${!chart_name[@]}"; do
-        helm pull navarcos/${chart_name[$i]} --version ${chart_version[$i]} --destination /tmp/helm
-        tgz_file_path="/tmp/helm/${chart_name[$i]}-${chart_version[$i]}.tgz"
-        while [ ! -e $tgz_file_path ]; do
-            sleep 1
+
+    chart_version=($(curl -s -X GET "$SOURCE_CHARTS_API_ENDPOINT/$SOURCE_PROJECT/charts/$chart_name" | jq -r '.[].version'))
+
+    for i in "${!chart_version[@]}"; do
+        helm pull tmp/${chart_name} --version ${chart_version[$i]} --destination /tmp/helm
+        tgz_file_path="/tmp/helm/${chart_name}-${chart_version[$i]}.tgz"
+
+        exist_chart_version=""        
+        i=0
+        while [ ! -e $tgz_file_path ] && [ "$i" -lt 50 ]; do
+            echo $tgz_file_path are being downloading
+            sleep 0.5
+            if [ "$i" -eq 50 ]; then
+                echo $tgz_file_path has been downloaded
+                exit 1
+            fi
         done
-        echo $tgz_file_path
-        # helm push $tgz_file_path oci://$SINK_HOST/$SINK_PROJECT
+        
+        echo $tgz_file_path has been downloaded
+
+        helm push $tgz_file_path $SINK_OCI_HOST/$SINK_PROJECT
+
+        exist_chart_version=""
+        j=0
+        while [ "$chart_version" != "$exist_chart_version" ] && [ "$j" -lt 50 ]; do
+            exist_chart_version=($(curl -s -X GET "$SINK_PROJECTS_API_ENDPOINT/$SINK_PROJECT/repositories/$chart_name/artifacts/${chart_version[$i]}" | jq -r '.tags[].name'))
+            j=$((i + 1)) 
+            sleep 1
+            if [ "$j" -eq 50 ]; then
+                echo "Chart version not found after 50 attempts, exiting."
+                exit 1
+            fi
+        done
+        rm -r $tgz_file_path
+
     done
 done
 
 helm repo remove tmp
-helm registry logout $SINK_HOST
-rm -r /tmp/helm
+helm registry logout $SINK_HTTPS_HOST
