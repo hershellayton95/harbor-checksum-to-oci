@@ -4,10 +4,11 @@ SOURCE_API_ENDPOINT="https://harbor.navarcos.ccoe-nc.com/api/chartrepo/navarcos/
 SOURCE_CHART_ENTPOINT="https://harbor.navarcos.ccoe-nc.com/chartrepo/navarcos"
 
 SINK_HOST="https://harbor.git.ccoe.internal/"
+SINK_PROJECT="test-harbor"
 SINK_USERNAME='robot$test-harbor+test'
 SINK_PASSWORD="pO5BhskMKoghK9hxy1yghHvl1Rz10SFg"
 
-helm repo add temp $SOURCE_CHART_ENTPOINT
+helm repo add tmp $SOURCE_CHART_ENTPOINT
 
 echo $SINK_PASSWORD | helm registry login $SINK_HOST -u $SINK_USERNAME --password-stdin 
 
@@ -21,8 +22,15 @@ for chart_name in "${charts_name[@]}"; do
     
     for i in "${!chart_name[@]}"; do
         helm pull navarcos/${chart_name[$i]} --version ${chart_version[$i]} --destination /tmp/helm
+        tgz_file_path="/tmp/helm/${chart_name[$i]}-${chart_version[$i]}.tgz"
+        while [ ! -e $tgz_file_path ]; do
+            sleep 1
+        done
+        echo $tgz_file_path
+        # helm push $tgz_file_path oci://$SINK_HOST/$SINK_PROJECT
     done
 done
 
-helm repo remove temp
+helm repo remove tmp
 helm registry logout $SINK_HOST
+rm -r /tmp/helm
