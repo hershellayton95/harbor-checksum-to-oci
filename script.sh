@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 SOURCE_HTTP_HOST="https://harbor.navarcos.ccoe-nc.com"
 SOURCE_CHARTS_API_ENDPOINT="$SOURCE_HTTP_HOST/api/chartrepo/"
 SOURCE_PROJECT="navarcos"
@@ -27,10 +25,16 @@ for chart_name in "${charts_name[@]}"; do
     chart_version=($(curl -s -X GET "$SOURCE_CHARTS_API_ENDPOINT/$SOURCE_PROJECT/charts/$chart_name" | jq -r '.[].version'))
 
     for i in "${!chart_version[@]}"; do
+        exist_chart_version=($(curl -s -X GET "$SINK_PROJECTS_API_ENDPOINT/$SINK_PROJECT/repositories/$chart_name/artifacts/${chart_version[$i]}" | jq -r '.tags[].name' 2> /dev/null))
+
+        if [[ -n $exist_chart_version ]]; then
+            echo $chart_name:${chart_version[$i]} already exist
+            continue;
+        fi
+
         helm pull tmp/${chart_name} --version ${chart_version[$i]} --destination /tmp/helm
         tgz_file_path="/tmp/helm/${chart_name}-${chart_version[$i]}.tgz"
-
-        exist_chart_version=""        
+        
         i=0
         while [ ! -e $tgz_file_path ] && [ "$i" -lt 50 ]; do
             echo $tgz_file_path are being downloading
