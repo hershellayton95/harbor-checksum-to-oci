@@ -1,17 +1,5 @@
 #!/bin/bash
 
-SOURCE_HTTP_HOST="https://harbor.navarcos.ccoe-nc.com"
-SOURCE_CHARTS_API_ENDPOINT="$SOURCE_HTTP_HOST/api/chartrepo/"
-SOURCE_PROJECT="navarcos"
-SOURCE_REPO_CHART_ENTPOINT="https://harbor.navarcos.ccoe-nc.com/chartrepo/navarcos"
-
-SINK_HTTPS_HOST="https://harbor.git.ccoe.internal"
-SINK_OCI_HOST="oci://harbor.git.ccoe.internal"
-SINK_PROJECTS_API_ENDPOINT="$SINK_HTTPS_HOST/api/v2.0/projects"
-SINK_PROJECT="test-harbor"
-SINK_USERNAME='robot$test-harbor+test'
-SINK_PASSWORD="pO5BhskMKoghK9hxy1yghHvl1Rz10SFg"
-
 helm repo add tmp $SOURCE_REPO_CHART_ENTPOINT
 
 echo $SINK_PASSWORD | helm registry login $SINK_HTTPS_HOST -u $SINK_USERNAME --password-stdin 
