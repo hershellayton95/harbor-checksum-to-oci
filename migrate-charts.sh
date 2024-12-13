@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source .env
+
 helm repo add tmp $SOURCE_REPO_CHART_ENTPOINT
 
 echo $SINK_PASSWORD | helm registry login $SINK_HTTPS_HOST -u $SINK_USERNAME --password-stdin 
@@ -11,6 +13,18 @@ mkdir -p /tmp/helm
 for chart_name in "${charts_name[@]}"; do
 
     chart_version=($(curl -s -X GET "$SOURCE_CHARTS_API_ENDPOINT/$SOURCE_PROJECT/charts/$chart_name" | jq -r '.[].version'))
+    
+    min=0
+    max=$(( ${#chart_version[@]} -1 ))
+
+    while [[ min -lt max ]]
+    do
+        x="${chart_version[$min]}"
+        chart_version[$min]="${chart_version[$max]}"
+        chart_version[$max]="$x"
+        
+        (( min++, max-- ))
+    done
 
     for i in "${!chart_version[@]}"; do
         exist_chart_version=($(curl -s -X GET "$SINK_PROJECTS_API_ENDPOINT/$SINK_PROJECT/repositories/$chart_name/artifacts/${chart_version[$i]}" | jq -r '.tags[].name' 2> /dev/null))
